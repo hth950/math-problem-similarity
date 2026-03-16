@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>수학 유사문제 검색 A/B 비교</title>
+
+  <!-- KaTeX -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" />
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="window._katexReady = true;"></script>
+
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+
+<div class="app-wrapper">
+
+  <!-- ── Header ─────────────────────────────────────────── -->
+  <header class="app-header">
+    <div class="header-brand">
+      <div class="brand-icon">∑</div>
+      <h1>수학 유사문제 검색 A/B 비교</h1>
+    </div>
+
+    <div class="stats-bar">
+      <div class="stat-pill">
+        <span class="stat-label">총 평가</span>
+        <span class="stat-value" id="hdr-total">—</span>
+      </div>
+      <div class="stat-divider"></div>
+      <div class="stat-pill">
+        <span class="stat-label">기존 Precision</span>
+        <span class="stat-value precision-legacy" id="hdr-legacy-prec">—</span>
+      </div>
+      <div class="stat-divider"></div>
+      <div class="stat-pill">
+        <span class="stat-label">신규 Precision</span>
+        <span class="stat-value precision-improved" id="hdr-improved-prec">—</span>
+      </div>
+      <div class="stat-divider" id="hdr-reranked-divider" style="display:none;"></div>
+      <div class="stat-pill" id="hdr-reranked-pill" style="display:none;">
+        <span class="stat-label">Reranked Precision</span>
+        <span class="stat-value precision-reranked" id="hdr-reranked-prec">—</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ── Input Panel ────────────────────────────────────── -->
+  <section class="input-section">
+    <div class="input-grid">
+
+      <!-- Column 1: ID Loader + Actions -->
+      <div class="id-loader-panel">
+        <div class="input-group">
+          <label>문제 ID로 불러오기</label>
+          <div class="id-loader-row">
+            <input type="number" id="input-problem-id" placeholder="e.g. 12345" min="1" />
+            <button class="btn btn-secondary btn-sm" id="btn-load">불러오기</button>
+            <button class="btn btn-accent btn-sm" id="btn-random" title="랜덤 문제 불러오기">랜덤</button>
+          </div>
+        </div>
+
+        <div style="margin-top: 8px;">
+          <div class="weight-group">
+            <div class="input-group" style="margin-bottom:6px;">
+              <label>가중치 설정 (q + s = 1.0)</label>
+            </div>
+            <div class="weight-sliders">
+              <div class="weight-item">
+                <div class="w-label">
+                  Q (문제)
+                  <span id="q-weight-val">0.3</span>
+                </div>
+                <input type="range" id="q-weight" min="0" max="1" step="0.05" value="0.3" />
+              </div>
+              <div class="weight-item">
+                <div class="w-label">
+                  S (해설)
+                  <span id="s-weight-val">0.7</span>
+                </div>
+                <input type="range" id="s-weight" min="0" max="1" step="0.05" value="0.7" disabled />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="params-row" style="margin-top: 8px;">
+          <div class="param-item">
+            <label>Top-K</label>
+            <select id="top-k">
+              <option value="5">5개</option>
+              <option value="10" selected>10개</option>
+              <option value="20">20개</option>
+            </select>
+          </div>
+          <div class="param-item">
+            <label>학년</label>
+            <select id="grade">
+              <option value="">전체</option>
+              <option value="1">1학년</option>
+              <option value="2">2학년</option>
+              <option value="3">3학년</option>
+            </select>
+          </div>
+          <div class="param-item">
+            <label>학교급</label>
+            <select id="school-level">
+              <option value="">전체</option>
+              <option value="middle">중학교</option>
+              <option value="high">고등학교</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="params-row" style="margin-top: 8px; align-items: center;">
+          <div class="param-item" style="flex: 0 0 auto; min-width: unset;">
+            <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; text-transform: none; letter-spacing: normal; font-size: 12px; font-weight: 600; color: var(--text-secondary);">
+              <input type="checkbox" id="rerank-enabled" style="width: auto; border: none; padding: 0; background: none;" />
+              LLM Reranking
+            </label>
+          </div>
+          <div class="param-item" id="rerank-options" style="display: none;">
+            <label>Provider</label>
+            <select id="rerank-provider">
+              <option value="dev">GPT-OSS (dev)</option>
+              <option value="openrouter">Gemini (openrouter)</option>
+            </select>
+          </div>
+          <div class="param-item" id="rerank-topk-item" style="display: none;">
+            <label>후보 수</label>
+            <input type="number" id="rerank-top-k" value="30" min="5" max="100" />
+          </div>
+        </div>
+
+        <div class="action-row" style="margin-top: 12px;">
+          <button class="btn btn-primary" id="btn-search" style="width: 100%;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+            </svg>
+            검색 비교
+          </button>
+        </div>
+      </div>
+
+      <!-- Column 2: Question textarea -->
+      <div class="input-group">
+        <label>문제 텍스트</label>
+        <textarea
+          id="input-question"
+          placeholder="문제 텍스트를 입력하세요...&#10;&#10;예) 다음 이차방정식을 풀어라. x² - 5x + 6 = 0"
+          style="min-height: 100px;"
+        ></textarea>
+        <div class="katex-preview" id="preview-question"></div>
+      </div>
+
+      <!-- Column 3: Solution textarea -->
+      <div class="input-group">
+        <label>해설 텍스트</label>
+        <textarea
+          id="input-solution"
+          placeholder="해설 텍스트를 입력하세요...&#10;&#10;예) x² - 5x + 6 = (x-2)(x-3) = 0&#10;따라서 x = 2 또는 x = 3"
+          style="min-height: 100px;"
+        ></textarea>
+        <div class="katex-preview" id="preview-solution"></div>
+      </div>
+
+    </div>
+
+    <!-- Error banner -->
+    <div class="error-banner" id="error-banner">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/>
+        <line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+      <span id="error-msg">오류가 발생했습니다.</span>
+    </div>
+  </section>
+
+  <!-- ── Results ─────────────────────────────────────────── -->
+  <main class="results-section" id="results-section">
+    <div class="results-grid" id="results-grid">
+
+      <!-- Legacy column -->
+      <div class="results-column" id="col-legacy">
+        <div class="column-header column-header-legacy">
+          <div class="col-title">
+            <span class="col-dot col-dot-legacy"></span>
+            <div>
+              <div>기존 시스템</div>
+              <div class="col-subtitle">FAISS 단일 벡터 (full_text)</div>
+            </div>
+          </div>
+          <span class="col-count" id="legacy-count"></span>
+        </div>
+        <div id="legacy-results">
+          <div class="empty-state">
+            <div class="empty-icon">
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+              </svg>
+            </div>
+            <div class="empty-title">검색 결과 없음</div>
+            <div>문제 텍스트를 입력하고 "검색 비교"를 클릭하세요</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Improved column -->
+      <div class="results-column" id="col-improved">
+        <div class="column-header column-header-improved">
+          <div class="col-title">
+            <span class="col-dot col-dot-improved"></span>
+            <div>
+              <div>새 시스템</div>
+              <div class="col-subtitle">Solution 분리 + 가중치 재랭킹</div>
+            </div>
+          </div>
+          <span class="col-count" id="improved-count"></span>
+        </div>
+        <div id="improved-results">
+          <div class="empty-state">
+            <div class="empty-icon">
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+              </svg>
+            </div>
+            <div class="empty-title">검색 결과 없음</div>
+            <div>문제 텍스트를 입력하고 "검색 비교"를 클릭하세요</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Reranked column -->
+      <div class="results-column" id="col-reranked" style="display:none;">
+        <div class="column-header column-header-reranked">
+          <div class="col-title">
+            <span class="col-dot col-dot-reranked"></span>
+            <div>
+              <div>LLM Reranking</div>
+              <div class="col-subtitle">벡터 검색 + LLM 재정렬</div>
+            </div>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span class="cost-badge" id="reranked-cost" style="display:none;"></span>
+            <span class="col-count" id="reranked-count"></span>
+          </div>
+        </div>
+        <div id="reranked-results">
+          <div class="empty-state">
+            <div class="empty-icon">
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+              </svg>
+            </div>
+            <div class="empty-title">검색 결과 없음</div>
+            <div>LLM Reranking을 활성화하고 검색하세요</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- ── Stats Footer ────────────────────────────────────── -->
+  <footer class="stats-footer">
+    <div class="stats-footer-inner">
+      <div class="stat-block">
+        <div class="stat-block-label">전체 평가</div>
+        <div>
+          <div class="stat-block-numbers">
+            <span class="stat-big" id="foot-total" style="color: var(--text-primary);">—</span>
+            <span class="stat-unit">건</span>
+          </div>
+        </div>
+      </div>
+      <div class="stat-divider" style="height:36px;"></div>
+      <div class="stat-block">
+        <div class="stat-block-label" style="color: var(--blue-600);">기존 시스템</div>
+        <div>
+          <div class="stat-block-numbers">
+            <span class="stat-big stat-big-legacy" id="foot-legacy-prec">—</span>
+          </div>
+          <div class="stat-detail" id="foot-legacy-detail">Precision@K</div>
+        </div>
+      </div>
+      <div class="stat-divider" style="height:36px;"></div>
+      <div class="stat-block">
+        <div class="stat-block-label" style="color: var(--green-600);">새 시스템</div>
+        <div>
+          <div class="stat-block-numbers">
+            <span class="stat-big stat-big-improved" id="foot-improved-prec">—</span>
+          </div>
+          <div class="stat-detail" id="foot-improved-detail">Precision@K</div>
+        </div>
+      </div>
+      <div class="stat-divider" id="foot-reranked-divider" style="height:36px; display:none;"></div>
+      <div class="stat-block" id="foot-reranked-block" style="display:none;">
+        <div class="stat-block-label" style="color: var(--purple-600, #7c3aed);">LLM Reranking</div>
+        <div>
+          <div class="stat-block-numbers">
+            <span class="stat-big stat-big-reranked" id="foot-reranked-prec">—</span>
+          </div>
+          <div class="stat-detail" id="foot-reranked-detail">Precision@K</div>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+</div><!-- .app-wrapper -->
+
+<!-- ── Loading Spinner ─────────────────────────────────────── -->
+<div class="spinner-overlay" id="spinner">
+  <div class="spinner"></div>
+  <div class="spinner-text" id="spinner-text">검색 중...</div>
+</div>
+
+<!-- ── Toast Container ─────────────────────────────────────── -->
+<div class="toast-container" id="toast-container"></div>
+
+<!-- ── Detail Modal ────────────────────────────────────────── -->
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-title">
+        <span id="modal-type-badge" class="meta-badge"></span>
+        문제 상세
+        <span class="problem-id" id="modal-problem-id"></span>
+      </div>
+      <button class="modal-close" id="modal-close" aria-label="닫기">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-meta-row" id="modal-meta-row"></div>
+
+      <div class="modal-section">
+        <div class="modal-section-label">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14,2 14,8 20,8"/>
+          </svg>
+          문제 (Question)
+        </div>
+        <div class="modal-section-content" id="modal-question">—</div>
+      </div>
+
+      <div class="modal-section" id="modal-refer-section" style="display:none;">
+        <div class="modal-section-label">보기 (Refer)</div>
+        <div class="modal-section-content" id="modal-refer">—</div>
+      </div>
+
+      <div class="modal-section" id="modal-solution-section">
+        <div class="modal-section-label">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="9,11 12,14 22,4"/>
+            <path d="M21,12v7a2,2,0,0,1-2,2H5a2,2,0,0,1-2-2V5a2,2,0,0,1,2-2h11"/>
+          </svg>
+          해설 (Solution)
+        </div>
+        <div class="modal-section-content" id="modal-solution">—</div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <span class="eval-label" id="modal-eval-label">이 문제가 검색어와 유사한가요?</span>
+      <button class="btn btn-similar" id="modal-btn-similar">유사</button>
+      <button class="btn btn-dissimilar" id="modal-btn-dissimilar">비유사</button>
+      <button class="btn btn-secondary btn-sm" id="modal-close-btn">닫기</button>
+    </div>
+  </div>
+</div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
