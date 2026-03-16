@@ -26,6 +26,9 @@ data/neo4j/
 data/evaluations/
 *.faiss
 
+# OMC state
+.omc/
+
 # IDE
 .vscode/
 .idea/
