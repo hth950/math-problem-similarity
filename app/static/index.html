@@ -44,6 +44,11 @@
         <span class="stat-label">Reranked Precision</span>
         <span class="stat-value precision-reranked" id="hdr-reranked-prec">—</span>
       </div>
+      <div class="stat-divider" id="hdr-graph-divider" style="display:none;"></div>
+      <div class="stat-pill" id="hdr-graph-pill" style="display:none;">
+        <span class="stat-label">Graph Precision</span>
+        <span class="stat-value precision-graph" id="hdr-graph-prec">—</span>
+      </div>
     </div>
   </header>
 
@@ -131,6 +136,25 @@
           <div class="param-item" id="rerank-topk-item" style="display: none;">
             <label>후보 수</label>
             <input type="number" id="rerank-top-k" value="30" min="5" max="100" />
+          </div>
+        </div>
+
+        <div class="params-row" style="margin-top: 8px; align-items: center;">
+          <div class="param-item" style="flex: 0 0 auto; min-width: unset;">
+            <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; text-transform: none; letter-spacing: normal; font-size: 12px; font-weight: 600; color: var(--text-secondary);">
+              <input type="checkbox" id="graph-enabled" style="width: auto; border: none; padding: 0; background: none;" />
+              Graph DB 검색
+            </label>
+          </div>
+          <div class="param-item" id="graph-alpha-item" style="display: none;">
+            <label>Vector 가중치 (α)</label>
+            <input type="range" id="graph-alpha" min="0" max="1" step="0.05" value="0.6" />
+            <span id="graph-alpha-val" style="font-size:11px; color:var(--text-muted);">0.60</span>
+          </div>
+          <div class="param-item" id="graph-beta-item" style="display: none;">
+            <label>Graph 가중치 (β)</label>
+            <input type="range" id="graph-beta" min="0" max="1" step="0.05" value="0.4" />
+            <span id="graph-beta-val" style="font-size:11px; color:var(--text-muted);">0.40</span>
           </div>
         </div>
 
@@ -260,6 +284,31 @@
         </div>
       </div>
 
+      <!-- Graph column -->
+      <div class="results-column" id="col-graph" style="display:none;">
+        <div class="column-header column-header-graph">
+          <div class="col-title">
+            <span class="col-dot col-dot-graph"></span>
+            <div>
+              <div>Graph DB</div>
+              <div class="col-subtitle">Neo4j 벡터 + 태그 구조</div>
+            </div>
+          </div>
+          <span class="col-count" id="graph-count"></span>
+        </div>
+        <div id="graph-results">
+          <div class="empty-state">
+            <div class="empty-icon">
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+              </svg>
+            </div>
+            <div class="empty-title">검색 결과 없음</div>
+            <div>Graph DB 검색을 활성화하고 검색하세요</div>
+          </div>
+        </div>
+      </div>
+
     </div>
   </main>
 
@@ -303,6 +352,16 @@
             <span class="stat-big stat-big-reranked" id="foot-reranked-prec">—</span>
           </div>
           <div class="stat-detail" id="foot-reranked-detail">Precision@K</div>
+        </div>
+      </div>
+      <div class="stat-divider" id="foot-graph-divider" style="height:36px; display:none;"></div>
+      <div class="stat-block" id="foot-graph-block" style="display:none;">
+        <div class="stat-block-label" style="color: var(--orange-600);">Graph DB</div>
+        <div>
+          <div class="stat-block-numbers">
+            <span class="stat-big stat-big-graph" id="foot-graph-prec">—</span>
+          </div>
+          <div class="stat-detail" id="foot-graph-detail">Precision@K</div>
         </div>
       </div>
     </div>

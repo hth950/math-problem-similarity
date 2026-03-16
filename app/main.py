@@ -6,8 +6,10 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from pathlib import Path
 from app.db.mysql_client import MySQLClient
+from app.db.neo4j_client import Neo4jClient
 from app.services.search_service import SearchService
 from app.services.reranking_service import RerankingService
+from app.services.graph_search_service import GraphSearchService
 
 app = FastAPI(title="Math Problem Similarity A/B Comparison")
 
@@ -19,6 +21,8 @@ app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 db = MySQLClient()
 search = SearchService()
 reranker = RerankingService(provider="dev", concurrency=16)
+neo4j_client = Neo4jClient()
+graph_search = GraphSearchService(neo4j_client)
 _eval_lock = asyncio.Lock()
 
 
@@ -26,6 +30,17 @@ _eval_lock = asyncio.Lock()
 async def startup():
     db_path = Path(__file__).parent.parent / "data" / "math_problems.db"
     search.load_problems(str(db_path))
+    try:
+        neo4j_client.connect()
+        graph_search.set_sqlite_path(str(db_path))
+        print("Neo4j connected for graph search.")
+    except Exception as e:
+        print(f"Neo4j not available (graph search disabled): {e}")
+
+
+@app.on_event("shutdown")
+async def shutdown():
+    neo4j_client.close()
 
 
 # Pydantic models
@@ -41,13 +56,17 @@ class SearchRequest(BaseModel):
     rerank: bool = False
     rerank_top_k: int = 30  # candidates to fetch before reranking
     rerank_provider: str = "dev"  # "dev" or "openrouter"
+    problem_id: int | None = None
+    graph_enabled: bool = False
+    graph_alpha: float = 0.6
+    graph_beta: float = 0.4
 
 
 class EvaluationRequest(BaseModel):
     query_problem_id: int | None = None
     result_problem_id: int
     is_similar: bool
-    search_type: str  # "legacy" or "improved"
+    search_type: str  # "legacy", "improved", "reranked", or "graph"
 
 
 # Routes
@@ -136,45 +155,84 @@ async def search_rerank(req: SearchRequest):
     }
 
 
+@app.post("/api/search/graph")
+async def search_graph(req: SearchRequest):
+    """Graph-based hybrid search: Neo4j vector + tag structure."""
+    if not neo4j_client.driver:
+        return {"error": "Neo4j not connected", "results": []}
+    results = await graph_search.search_hybrid(
+        problem_id=req.problem_id,
+        question=req.question,
+        solution=req.solution,
+        top_k=req.top_k,
+        alpha=req.graph_alpha,
+        beta=req.graph_beta,
+        grade=req.grade,
+        school_level=req.school_level,
+        exclude_id=req.exclude_id,
+    )
+    return {"results": results}
+
+
 @app.post("/api/search/compare")
 async def search_compare(req: SearchRequest):
     full_text = f"{req.question}\n{req.solution}"
 
-    # Run all three in parallel: legacy, improved, improved+rerank
-    legacy_task = search.search_legacy(
-        full_text, req.top_k, req.grade, req.school_level, req.exclude_id
-    )
-    improved_task = search.search_improved(
-        req.question, req.solution, req.top_k,
-        req.q_weight, req.s_weight, req.grade, req.school_level, req.exclude_id
-    )
+    # Build task list
+    tasks = {
+        "legacy": search.search_legacy(
+            full_text, req.top_k, req.grade, req.school_level, req.exclude_id
+        ),
+        "improved": search.search_improved(
+            req.question, req.solution, req.top_k,
+            req.q_weight, req.s_weight, req.grade, req.school_level, req.exclude_id
+        ),
+    }
 
     if req.rerank:
-        # Also run reranked version
-        rerank_candidates_task = search.search_improved(
+        tasks["rerank_candidates"] = search.search_improved(
             req.question, req.solution, req.rerank_top_k,
             req.q_weight, req.s_weight, req.grade, req.school_level, req.exclude_id
         )
-        legacy_results, improved_results, rerank_candidates = await asyncio.gather(
-            legacy_task, improved_task, rerank_candidates_task
+
+    if req.graph_enabled and neo4j_client.driver:
+        tasks["graph"] = graph_search.search_hybrid(
+            problem_id=req.problem_id,
+            question=req.question,
+            solution=req.solution,
+            top_k=req.top_k,
+            alpha=req.graph_alpha,
+            beta=req.graph_beta,
+            grade=req.grade,
+            school_level=req.school_level,
+            exclude_id=req.exclude_id,
         )
+
+    # Execute all in parallel
+    keys = list(tasks.keys())
+    results_list = await asyncio.gather(*tasks.values())
+    results_map = dict(zip(keys, results_list))
+
+    response = {
+        "legacy": results_map["legacy"],
+        "improved": results_map["improved"],
+    }
+
+    if req.rerank:
         query_text = f"발문: {req.question}\n해설: {req.solution}"
         if reranker.provider != req.rerank_provider:
             reranker.provider = req.rerank_provider
             reranker._client = None
-        reranked_results, cost_info = await reranker.rerank(query_text, rerank_candidates, req.top_k)
-        return {
-            "legacy": legacy_results,
-            "improved": improved_results,
-            "reranked": reranked_results,
-            "cost_info": cost_info,
-        }
+        reranked_results, cost_info = await reranker.rerank(
+            query_text, results_map["rerank_candidates"], req.top_k
+        )
+        response["reranked"] = reranked_results
+        response["cost_info"] = cost_info
 
-    legacy_results, improved_results = await asyncio.gather(legacy_task, improved_task)
-    return {
-        "legacy": legacy_results,
-        "improved": improved_results,
-    }
+    if "graph" in results_map:
+        response["graph"] = results_map["graph"]
+
+    return response
 
 
 @app.post("/api/evaluate")
@@ -196,20 +254,20 @@ async def get_stats():
     import json
     eval_path = Path(__file__).parent.parent / "data" / "evaluations" / "user_evaluations.json"
     if not eval_path.exists():
-        return {"total": 0, "legacy": {}, "improved": {}}
+        return {"total": 0, "legacy": {}, "improved": {}, "reranked": {}, "graph": {}}
     evaluations = json.loads(eval_path.read_text())
-    legacy_evals = [e for e in evaluations if e["search_type"] == "legacy"]
-    improved_evals = [e for e in evaluations if e["search_type"] == "improved"]
+
+    def calc_stats(evals):
+        return {
+            "total": len(evals),
+            "similar": sum(1 for e in evals if e["is_similar"]),
+            "precision": round(sum(1 for e in evals if e["is_similar"]) / max(len(evals), 1), 4),
+        }
+
     return {
         "total": len(evaluations),
-        "legacy": {
-            "total": len(legacy_evals),
-            "similar": sum(1 for e in legacy_evals if e["is_similar"]),
-            "precision": round(sum(1 for e in legacy_evals if e["is_similar"]) / max(len(legacy_evals), 1), 4),
-        },
-        "improved": {
-            "total": len(improved_evals),
-            "similar": sum(1 for e in improved_evals if e["is_similar"]),
-            "precision": round(sum(1 for e in improved_evals if e["is_similar"]) / max(len(improved_evals), 1), 4),
-        },
+        "legacy": calc_stats([e for e in evaluations if e["search_type"] == "legacy"]),
+        "improved": calc_stats([e for e in evaluations if e["search_type"] == "improved"]),
+        "reranked": calc_stats([e for e in evaluations if e["search_type"] == "reranked"]),
+        "graph": calc_stats([e for e in evaluations if e["search_type"] == "graph"]),
     }

@@ -7,7 +7,7 @@
 
 // ─── State ────────────────────────────────────────────────
 const state = {
-  currentResults: { legacy: [], improved: [], reranked: [] },
+  currentResults: { legacy: [], improved: [], reranked: [], graph: [] },
   queryProblemId: null,
   // Modal context: which card opened the modal
   modalContext: { resultId: null, searchType: null, cardEl: null },
@@ -218,6 +218,10 @@ function buildSearchRequest() {
     rerank:          $('rerank-enabled').checked,
     rerank_top_k:    parseInt($('rerank-top-k').value, 10) || 30,
     rerank_provider: $('rerank-provider').value,
+    problem_id:      state.queryProblemId || null,
+    graph_enabled:   $('graph-enabled').checked,
+    graph_alpha:     parseFloat($('graph-alpha').value),
+    graph_beta:      parseFloat($('graph-beta').value),
   };
 }
 
@@ -244,24 +248,28 @@ async function searchCompare() {
     const legacy   = data.legacy   || [];
     const improved = data.improved || [];
     const reranked = data.reranked || [];
+    const graph    = data.graph    || [];
     const costInfo = data.cost_info || null;
 
-    state.currentResults = { legacy, improved, reranked };
+    state.currentResults = { legacy, improved, reranked, graph };
 
-    // Show/hide reranked column based on whether reranking is enabled and results exist
+    // Show/hide columns
     const showReranked = req.rerank;
+    const showGraph = req.graph_enabled && graph.length > 0;
     setRerankedColumnVisible(showReranked);
+    setGraphColumnVisible(showGraph);
 
-    renderResults(legacy, improved, reranked);
+    renderResults(legacy, improved, reranked, graph);
     renderCostInfo(costInfo);
     await loadStats();
 
     const parts = [`기존 ${legacy.length}건`, `신규 ${improved.length}건`];
     if (showReranked) parts.push(`Reranked ${reranked.length}건`);
+    if (showGraph) parts.push(`Graph ${graph.length}건`);
     if (costInfo && costInfo.cost_krw > 0) {
       parts.push(`비용 ₩${costInfo.cost_krw.toLocaleString()}`);
     }
-    if (legacy.length === 0 && improved.length === 0 && (!showReranked || reranked.length === 0)) {
+    if (legacy.length === 0 && improved.length === 0) {
       showToast('검색 결과가 없습니다.', 'info');
     } else {
       showToast(`검색 완료: ${parts.join(', ')}`, 'success');
@@ -297,8 +305,29 @@ function setRerankedColumnVisible(visible) {
   }
 }
 
+// ─── Toggle graph column visibility ─────────────────────
+function setGraphColumnVisible(visible) {
+  const col = $('col-graph');
+  const grid = $('results-grid');
+  if (visible) {
+    col.style.display = '';
+    grid.classList.add('four-columns');
+    $('foot-graph-divider').style.display = '';
+    $('foot-graph-block').style.display = '';
+    $('hdr-graph-divider').style.display = '';
+    $('hdr-graph-pill').style.display = '';
+  } else {
+    col.style.display = 'none';
+    grid.classList.remove('four-columns');
+    $('foot-graph-divider').style.display = 'none';
+    $('foot-graph-block').style.display = 'none';
+    $('hdr-graph-divider').style.display = 'none';
+    $('hdr-graph-pill').style.display = 'none';
+  }
+}
+
 // ─── Render results into columns ─────────────────────────
-function renderResults(legacy, improved, reranked = []) {
+function renderResults(legacy, improved, reranked = [], graph = []) {
   const legacyContainer    = $('legacy-results');
   const improvedContainer  = $('improved-results');
   const rerankedContainer  = $('reranked-results');
@@ -324,10 +353,20 @@ function renderResults(legacy, improved, reranked = []) {
     rerankedContainer.appendChild(card);
   });
 
+  const graphContainer = $('graph-results');
+  $('graph-count').textContent = graph.length ? `${graph.length}건` : '';
+  graphContainer.innerHTML = graph.length ? '' : emptyStateGraph();
+
+  graph.forEach((r, i) => {
+    const card = renderResultCard(r, 'graph', i + 1);
+    graphContainer.appendChild(card);
+  });
+
   // Re-render KaTeX in all columns after DOM update
   renderKaTeX(legacyContainer);
   renderKaTeX(improvedContainer);
   renderKaTeX(rerankedContainer);
+  renderKaTeX(graphContainer);
 }
 
 // ─── Render cost info badge in reranked column ──────────
@@ -370,6 +409,18 @@ function emptyStateReranked() {
   </div>`;
 }
 
+function emptyStateGraph() {
+  return `<div class="empty-state">
+    <div class="empty-icon">
+      <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+      </svg>
+    </div>
+    <div class="empty-title">검색 결과 없음</div>
+    <div>Graph DB 검색을 활성화하고 검색하세요</div>
+  </div>`;
+}
+
 // ─── Render a single result card ─────────────────────────
 function renderResultCard(result, searchType, rank) {
   const card = document.createElement('div');
@@ -381,6 +432,7 @@ function renderResultCard(result, searchType, rank) {
   const scoreStr = score.toFixed(4);
   const scoreClass = scoreBadgeClass(score);
   const isReranked = searchType === 'reranked';
+  const isGraph = searchType === 'graph';
 
   const questionText  = result.question_text  || result.question  || '';
   const solutionText  = result.solution_text  || result.solution  || '';
@@ -423,8 +475,18 @@ function renderResultCard(result, searchType, rank) {
   const rerankReasonHtml = isReranked && result.rerank_reason ? `
     <div class="rerank-reason">${escapeHtml(result.rerank_reason)}</div>` : '';
 
-  // For reranked cards, show vector score as secondary
-  const vectorScoreHtml = isReranked ? `
+  // Graph score display
+  const graphScoreHtml = isGraph ? `
+    <span class="graph-score-display">
+      G: ${(result.graph_score ?? 0).toFixed(2)}${result.graph_score_inferred ? '<span class="inferred-badge">추정</span>' : ''}
+    </span>` : '';
+
+  // Shared tags display
+  const sharedTagsHtml = isGraph && result.shared_tags && result.shared_tags.length > 0 ? `
+    <div style="margin-top:4px;">${result.shared_tags.map(t => `<span class="shared-tag-badge">${escapeHtml(t)}</span>`).join(' ')}</div>` : '';
+
+  // For reranked/graph cards, show vector score as secondary
+  const vectorScoreHtml = (isReranked || isGraph) ? `
     <span class="score-badge ${scoreClass}" style="opacity:0.65; font-size:10px;" title="벡터 유사도">${scoreStr}</span>` :
     `<span class="score-badge ${scoreClass}">${scoreStr}</span>`;
 
@@ -432,13 +494,13 @@ function renderResultCard(result, searchType, rank) {
     <div class="card-top">
       <div class="card-rank-score">
         <span class="rank-badge">${rank}</span>
-        ${rerankScoreHtml || vectorScoreHtml}
-        ${!isReranked && result.question_score !== undefined ? `
+        ${rerankScoreHtml || graphScoreHtml || vectorScoreHtml}
+        ${!isReranked && !isGraph && result.question_score !== undefined ? `
         <div class="score-breakdown">
           <span class="q-score">Q: ${result.question_score}</span>
           <span class="s-score">S: ${result.solution_score}</span>
         </div>` : ''}
-        ${isReranked && rerankScoreHtml ? vectorScoreHtml : ''}
+        ${(isReranked && rerankScoreHtml) || (isGraph && graphScoreHtml) ? vectorScoreHtml : ''}
       </div>
       <div class="card-meta">
         <span class="problem-id">#${result.id}</span>
@@ -446,6 +508,7 @@ function renderResultCard(result, searchType, rank) {
       </div>
     </div>
     ${rerankReasonHtml}
+    ${sharedTagsHtml}
     ${tagsHtml}
     <div class="card-text" style="margin-top:${(rerankReasonHtml || tagsHtml) ? '8px' : '0'};">
       <div class="text-label">문제</div>
@@ -510,7 +573,7 @@ async function evaluate(resultProblemId, isSimilar, searchType, cardEl) {
         search_type: searchType,
       }),
     });
-    const typeLabel = searchType === 'legacy' ? '기존' : searchType === 'improved' ? '신규' : 'LLM Reranking';
+    const typeLabel = searchType === 'legacy' ? '기존' : searchType === 'improved' ? '신규' : searchType === 'graph' ? 'Graph DB' : 'LLM Reranking';
     showToast(
       `[${typeLabel}] #${resultProblemId} → ${isSimilar ? '유사' : '비유사'} 저장`,
       'success',
@@ -552,6 +615,26 @@ async function loadStats() {
     if (improvedTotal > 0) {
       $('foot-improved-detail').textContent = `유사 ${improvedSim} / ${improvedTotal}건`;
     }
+
+    // Reranked stats
+    const rerankedPrec  = data.reranked?.precision ?? null;
+    const rerankedTotal = data.reranked?.total ?? 0;
+    const rerankedSim   = data.reranked?.similar ?? 0;
+    $('hdr-reranked-prec').textContent = fmtPrec(rerankedPrec);
+    $('foot-reranked-prec').textContent = fmtPrec(rerankedPrec);
+    if (rerankedTotal > 0) {
+      $('foot-reranked-detail').textContent = `유사 ${rerankedSim} / ${rerankedTotal}건`;
+    }
+
+    // Graph stats
+    const graphPrec  = data.graph?.precision ?? null;
+    const graphTotal = data.graph?.total ?? 0;
+    const graphSim   = data.graph?.similar ?? 0;
+    $('hdr-graph-prec').textContent = fmtPrec(graphPrec);
+    $('foot-graph-prec').textContent = fmtPrec(graphPrec);
+    if (graphTotal > 0) {
+      $('foot-graph-detail').textContent = `유사 ${graphSim} / ${graphTotal}건`;
+    }
   } catch {
     // Stats load failure is non-critical — silently ignore
   }
@@ -567,11 +650,12 @@ function openModal(problem, searchType) {
     ),
   };
 
-  const typeLabelMap = { legacy: '기존', improved: '신규', reranked: 'LLM Reranking' };
+  const typeLabelMap = { legacy: '기존', improved: '신규', reranked: 'LLM Reranking', graph: 'Graph DB' };
   const typeColorMap = {
     legacy:   { bg: 'var(--blue-50)', color: 'var(--blue-700)', border: 'var(--blue-100)' },
     improved: { bg: 'var(--green-50)', color: 'var(--green-700)', border: 'var(--green-100)' },
     reranked: { bg: 'var(--purple-50, #f5f3ff)', color: 'var(--purple-700, #6d28d9)', border: 'var(--purple-100, #ede9fe)' },
+    graph:    { bg: 'var(--orange-50)', color: 'var(--orange-700)', border: 'var(--orange-100)' },
   };
   const colors = typeColorMap[searchType] || typeColorMap.legacy;
 
@@ -725,6 +809,25 @@ $('rerank-enabled').addEventListener('change', () => {
     // Hide reranked column when toggled off
     setRerankedColumnVisible(false);
   }
+});
+
+// ─── Graph checkbox toggle ───────────────────────────────
+$('graph-enabled').addEventListener('change', () => {
+  const enabled = $('graph-enabled').checked;
+  $('graph-alpha-item').style.display = enabled ? '' : 'none';
+  $('graph-beta-item').style.display  = enabled ? '' : 'none';
+  if (!enabled) {
+    setGraphColumnVisible(false);
+  }
+});
+
+// Graph alpha/beta slider sync
+$('graph-alpha').addEventListener('input', () => {
+  const alpha = parseFloat($('graph-alpha').value);
+  const beta = Math.round((1 - alpha) * 100) / 100;
+  $('graph-beta').value = beta;
+  $('graph-alpha-val').textContent = alpha.toFixed(2);
+  $('graph-beta-val').textContent = beta.toFixed(2);
 });
 
 // ─── Init ─────────────────────────────────────────────────

@@ -1016,6 +1016,81 @@ body {
   display: block;
 }
 
+/* ─── Graph DB column — Orange ────────────────────────────── */
+:root {
+  --orange-50:  #fff7ed;
+  --orange-100: #ffedd5;
+  --orange-500: #f97316;
+  --orange-600: #ea580c;
+  --orange-700: #c2410c;
+}
+
+.precision-graph { color: var(--orange-600); }
+.stat-big-graph  { color: var(--orange-600); }
+
+.column-header-graph {
+  background: var(--orange-50);
+  border: 1px solid var(--orange-100);
+  color: var(--orange-700);
+}
+
+.col-dot-graph { background: var(--orange-500); }
+
+/* 4-column layout */
+.results-grid.four-columns {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+@media (max-width: 1400px) {
+  .results-grid.four-columns {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .results-grid.four-columns {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Shared tag badges */
+.shared-tag-badge {
+  font-size: 10px;
+  font-weight: 500;
+  padding: 1px 6px;
+  border-radius: 20px;
+  background: var(--orange-50);
+  border: 1px solid var(--orange-100);
+  color: var(--orange-700);
+  white-space: nowrap;
+}
+
+/* Inferred badge */
+.inferred-badge {
+  font-size: 9px;
+  font-weight: 600;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde68a;
+  margin-left: 4px;
+}
+
+/* Graph score display */
+.graph-score-display {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: var(--orange-50);
+  color: var(--orange-700);
+  border: 1px solid var(--orange-100);
+}
+
 /* ─── KaTeX overrides ────────────────────────────────────── */
 .katex { font-size: 1em; }
 .katex-display { margin: 8px 0; overflow-x: auto; }
