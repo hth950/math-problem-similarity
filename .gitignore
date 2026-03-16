@@ -21,6 +21,9 @@ pip-wheel-metadata/
 # Data files
 data/problems/*.json
 data/problems/*.csv
+data/*.db
+data/neo4j/
+data/evaluations/
 *.faiss
 
 # IDE
