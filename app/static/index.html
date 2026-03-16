@@ -204,6 +204,24 @@
 
   <!-- ── Results ─────────────────────────────────────────── -->
   <main class="results-section" id="results-section">
+
+    <!-- Column visibility toggles -->
+    <div class="column-toggles" id="column-toggles">
+      <span class="toggle-label">표시 컬럼:</span>
+      <button class="toggle-btn toggle-btn-legacy active" data-col="legacy">
+        <span class="col-dot col-dot-legacy"></span> 기존
+      </button>
+      <button class="toggle-btn toggle-btn-improved active" data-col="improved">
+        <span class="col-dot col-dot-improved"></span> 신규
+      </button>
+      <button class="toggle-btn toggle-btn-reranked" data-col="reranked" style="display:none;">
+        <span class="col-dot col-dot-reranked"></span> Reranked
+      </button>
+      <button class="toggle-btn toggle-btn-graph" data-col="graph" style="display:none;">
+        <span class="col-dot col-dot-graph"></span> Graph
+      </button>
+    </div>
+
     <div class="results-grid" id="results-grid">
 
       <!-- Legacy column -->

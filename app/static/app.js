@@ -283,46 +283,73 @@ async function searchCompare() {
   }
 }
 
-// ─── Toggle reranked column visibility ───────────────────
+// ─── Column visibility management ───────────────────────
+
+// Column config: maps column key → { col, footer, header elements }
+const columnConfig = {
+  legacy:   { col: 'col-legacy',   footDiv: null,                    footBlock: null,                  hdrDiv: null,                   hdrPill: null },
+  improved: { col: 'col-improved', footDiv: null,                    footBlock: null,                  hdrDiv: null,                   hdrPill: null },
+  reranked: { col: 'col-reranked', footDiv: 'foot-reranked-divider', footBlock: 'foot-reranked-block', hdrDiv: 'hdr-reranked-divider', hdrPill: 'hdr-reranked-pill' },
+  graph:    { col: 'col-graph',    footDiv: 'foot-graph-divider',    footBlock: 'foot-graph-block',    hdrDiv: 'hdr-graph-divider',    hdrPill: 'hdr-graph-pill' },
+};
+
+// Track which columns are available (have data) vs visible (toggled on)
+const columnAvailable = { legacy: true, improved: true, reranked: false, graph: false };
+const columnVisible   = { legacy: true, improved: true, reranked: false, graph: false };
+
 function setRerankedColumnVisible(visible) {
-  const col = $('col-reranked');
-  const grid = $('results-grid');
-  if (visible) {
-    col.style.display = '';
-    grid.classList.add('three-columns');
-    // Show footer/header reranked stats
-    $('foot-reranked-divider').style.display = '';
-    $('foot-reranked-block').style.display = '';
-    $('hdr-reranked-divider').style.display = '';
-    $('hdr-reranked-pill').style.display = '';
-  } else {
-    col.style.display = 'none';
-    grid.classList.remove('three-columns');
-    $('foot-reranked-divider').style.display = 'none';
-    $('foot-reranked-block').style.display = 'none';
-    $('hdr-reranked-divider').style.display = 'none';
-    $('hdr-reranked-pill').style.display = 'none';
+  columnAvailable.reranked = visible;
+  columnVisible.reranked = visible;
+  // Show/hide toggle button
+  const btn = document.querySelector('.toggle-btn-reranked');
+  if (btn) {
+    btn.style.display = visible ? '' : 'none';
+    btn.classList.toggle('active', visible);
   }
+  updateColumnLayout();
 }
 
-// ─── Toggle graph column visibility ─────────────────────
 function setGraphColumnVisible(visible) {
-  const col = $('col-graph');
+  columnAvailable.graph = visible;
+  columnVisible.graph = visible;
+  const btn = document.querySelector('.toggle-btn-graph');
+  if (btn) {
+    btn.style.display = visible ? '' : 'none';
+    btn.classList.toggle('active', visible);
+  }
+  updateColumnLayout();
+}
+
+function toggleColumn(colKey) {
+  if (!columnAvailable[colKey]) return;
+  columnVisible[colKey] = !columnVisible[colKey];
+  // Update toggle button
+  const btn = document.querySelector(`.toggle-btn-${colKey}`);
+  if (btn) btn.classList.toggle('active', columnVisible[colKey]);
+  updateColumnLayout();
+}
+
+function updateColumnLayout() {
   const grid = $('results-grid');
-  if (visible) {
-    col.style.display = '';
-    grid.classList.add('four-columns');
-    $('foot-graph-divider').style.display = '';
-    $('foot-graph-block').style.display = '';
-    $('hdr-graph-divider').style.display = '';
-    $('hdr-graph-pill').style.display = '';
-  } else {
-    col.style.display = 'none';
-    grid.classList.remove('four-columns');
-    $('foot-graph-divider').style.display = 'none';
-    $('foot-graph-block').style.display = 'none';
-    $('hdr-graph-divider').style.display = 'none';
-    $('hdr-graph-pill').style.display = 'none';
+  const visibleKeys = Object.keys(columnVisible).filter(k => columnVisible[k] && columnAvailable[k]);
+  const count = visibleKeys.length;
+
+  // Update grid class
+  grid.classList.remove('two-columns', 'three-columns', 'four-columns');
+  if (count === 1) grid.classList.add('one-column');
+  else if (count === 2) grid.classList.add('two-columns');
+  else if (count === 3) grid.classList.add('three-columns');
+  else if (count >= 4) grid.classList.add('four-columns');
+
+  // Show/hide each column and its stats
+  for (const [key, cfg] of Object.entries(columnConfig)) {
+    const isVis = columnVisible[key] && columnAvailable[key];
+    const colEl = $(cfg.col);
+    if (colEl) colEl.style.display = isVis ? '' : 'none';
+    if (cfg.footDiv)   $(cfg.footDiv).style.display   = isVis ? '' : 'none';
+    if (cfg.footBlock) $(cfg.footBlock).style.display = isVis ? '' : 'none';
+    if (cfg.hdrDiv)    $(cfg.hdrDiv).style.display    = isVis ? '' : 'none';
+    if (cfg.hdrPill)   $(cfg.hdrPill).style.display   = isVis ? '' : 'none';
   }
 }
 
@@ -828,6 +855,14 @@ $('graph-alpha').addEventListener('input', () => {
   $('graph-beta').value = beta;
   $('graph-alpha-val').textContent = alpha.toFixed(2);
   $('graph-beta-val').textContent = beta.toFixed(2);
+});
+
+// ─── Column toggle buttons ──────────────────────────────
+document.querySelectorAll('.toggle-btn[data-col]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const colKey = btn.dataset.col;
+    toggleColumn(colKey);
+  });
 });
 
 // ─── Init ─────────────────────────────────────────────────

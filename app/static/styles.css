@@ -438,10 +438,90 @@ body {
   width: 100%;
 }
 
+/* Column visibility toggles */
+.column-toggles {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding: 8px 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.toggle-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-right: 4px;
+  white-space: nowrap;
+}
+
+.toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: var(--font);
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--bg-muted);
+  color: var(--text-muted);
+  transition: all .15s;
+  white-space: nowrap;
+}
+
+.toggle-btn:hover {
+  border-color: #cbd5e1;
+  color: var(--text-secondary);
+}
+
+.toggle-btn.active {
+  color: #fff;
+  border-color: transparent;
+}
+
+.toggle-btn-legacy.active {
+  background: var(--blue-600);
+}
+
+.toggle-btn-improved.active {
+  background: var(--green-600);
+}
+
+.toggle-btn-reranked.active {
+  background: #7c3aed;
+}
+
+.toggle-btn-graph.active {
+  background: var(--orange-600);
+}
+
+.toggle-btn .col-dot {
+  width: 6px;
+  height: 6px;
+}
+
+.toggle-btn.active .col-dot {
+  background: rgba(255,255,255,.7);
+}
+
 .results-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 20px;
+}
+
+.results-grid.one-column {
+  grid-template-columns: 1fr;
+}
+
+.results-grid.two-columns {
+  grid-template-columns: 1fr 1fr;
 }
 
 .results-grid.three-columns {
