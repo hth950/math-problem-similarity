@@ -234,7 +234,10 @@
               <div class="col-subtitle">FAISS 단일 벡터 (full_text)</div>
             </div>
           </div>
-          <span class="col-count" id="legacy-count"></span>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span class="timing-badge" id="legacy-timing" style="display:none;"></span>
+            <span class="col-count" id="legacy-count"></span>
+          </div>
         </div>
         <div id="legacy-results">
           <div class="empty-state">
@@ -259,7 +262,10 @@
               <div class="col-subtitle">Solution 분리 + 가중치 재랭킹</div>
             </div>
           </div>
-          <span class="col-count" id="improved-count"></span>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span class="timing-badge" id="improved-timing" style="display:none;"></span>
+            <span class="col-count" id="improved-count"></span>
+          </div>
         </div>
         <div id="improved-results">
           <div class="empty-state">
@@ -285,6 +291,7 @@
             </div>
           </div>
           <div style="display:flex; align-items:center; gap:8px;">
+            <span class="timing-badge" id="reranked-timing" style="display:none;"></span>
             <span class="cost-badge" id="reranked-cost" style="display:none;"></span>
             <span class="col-count" id="reranked-count"></span>
           </div>
@@ -312,7 +319,10 @@
               <div class="col-subtitle">Neo4j 벡터 + 태그 구조</div>
             </div>
           </div>
-          <span class="col-count" id="graph-count"></span>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span class="timing-badge" id="graph-timing" style="display:none;"></span>
+            <span class="col-count" id="graph-count"></span>
+          </div>
         </div>
         <div id="graph-results">
           <div class="empty-state">

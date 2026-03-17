@@ -1045,6 +1045,19 @@ body {
   font-style: italic;
 }
 
+/* ─── Timing badge ──────────────────────────────────────── */
+.timing-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 20px;
+  background: #f0f9ff;
+  color: #0369a1;
+  border: 1px solid #bae6fd;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
 /* ─── Cost badge ────────────────────────────────────────── */
 .cost-badge {
   font-size: 10px;

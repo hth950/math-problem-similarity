@@ -176,27 +176,37 @@ async def search_graph(req: SearchRequest):
 
 @app.post("/api/search/compare")
 async def search_compare(req: SearchRequest):
+    import time
+
     full_text = f"{req.question}\n{req.solution}"
+    timings = {}
+
+    # Wrap each task to measure elapsed time
+    async def timed(key, coro):
+        t0 = time.perf_counter()
+        result = await coro
+        timings[key] = round(time.perf_counter() - t0, 3)
+        return result
 
     # Build task list
     tasks = {
-        "legacy": search.search_legacy(
+        "legacy": timed("legacy", search.search_legacy(
             full_text, req.top_k, req.grade, req.school_level, req.exclude_id
-        ),
-        "improved": search.search_improved(
+        )),
+        "improved": timed("improved", search.search_improved(
             req.question, req.solution, req.top_k,
             req.q_weight, req.s_weight, req.grade, req.school_level, req.exclude_id
-        ),
+        )),
     }
 
     if req.rerank:
-        tasks["rerank_candidates"] = search.search_improved(
+        tasks["rerank_candidates"] = timed("rerank_candidates", search.search_improved(
             req.question, req.solution, req.rerank_top_k,
             req.q_weight, req.s_weight, req.grade, req.school_level, req.exclude_id
-        )
+        ))
 
     if req.graph_enabled and neo4j_client.driver:
-        tasks["graph"] = graph_search.search_hybrid(
+        tasks["graph"] = timed("graph", graph_search.search_hybrid(
             problem_id=req.problem_id,
             question=req.question,
             solution=req.solution,
@@ -206,7 +216,7 @@ async def search_compare(req: SearchRequest):
             grade=req.grade,
             school_level=req.school_level,
             exclude_id=req.exclude_id,
-        )
+        ))
 
     # Execute all in parallel
     keys = list(tasks.keys())
@@ -223,15 +233,18 @@ async def search_compare(req: SearchRequest):
         if reranker.provider != req.rerank_provider:
             reranker.provider = req.rerank_provider
             reranker._client = None
+        t0 = time.perf_counter()
         reranked_results, cost_info = await reranker.rerank(
             query_text, results_map["rerank_candidates"], req.top_k
         )
+        timings["reranked"] = round(time.perf_counter() - t0 + timings.get("rerank_candidates", 0), 3)
         response["reranked"] = reranked_results
         response["cost_info"] = cost_info
 
     if "graph" in results_map:
         response["graph"] = results_map["graph"]
 
+    response["timings"] = timings
     return response
 
 

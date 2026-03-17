@@ -161,6 +161,9 @@ async function loadRandomProblem() {
     $('input-question').value = stripHtml(problem.question_text || problem.question || '');
     $('input-solution').value = stripHtml(problem.solution_text || problem.solution || '');
     state.queryProblemId = problem.id;
+    // Auto-set school_level and grade dropdowns (reset to "전체" if absent)
+    $('school-level').value = problem.school_level || '';
+    $('grade').value = problem.grade != null ? String(problem.grade) : '';
     updateInputPreviews();
     showToast(`랜덤 문제 #${problem.id} 불러오기 완료`, 'success');
   } catch (err) {
@@ -194,6 +197,9 @@ async function loadProblemById() {
     $('input-question').value = stripHtml(problem.question_text || problem.question || '');
     $('input-solution').value = stripHtml(problem.solution_text || problem.solution || '');
     state.queryProblemId = id;
+    // Auto-set school_level and grade dropdowns (reset to "전체" if absent)
+    $('school-level').value = problem.school_level || '';
+    $('grade').value = problem.grade != null ? String(problem.grade) : '';
     updateInputPreviews();
     showToast(`문제 #${id} 불러오기 완료`, 'success');
   } catch (err) {
@@ -251,6 +257,7 @@ async function searchCompare() {
     const graph    = data.graph    || [];
     const costInfo = data.cost_info || null;
 
+    const timings = data.timings || {};
     state.currentResults = { legacy, improved, reranked, graph };
 
     // Show/hide columns
@@ -261,6 +268,7 @@ async function searchCompare() {
 
     renderResults(legacy, improved, reranked, graph);
     renderCostInfo(costInfo);
+    renderTimings(timings);
     await loadStats();
 
     const parts = [`기존 ${legacy.length}건`, `신규 ${improved.length}건`];
@@ -394,6 +402,28 @@ function renderResults(legacy, improved, reranked = [], graph = []) {
   renderKaTeX(improvedContainer);
   renderKaTeX(rerankedContainer);
   renderKaTeX(graphContainer);
+}
+
+// ─── Render search timings in column headers ────────────
+function renderTimings(timings) {
+  const mapping = {
+    legacy:   'legacy-timing',
+    improved: 'improved-timing',
+    reranked: 'reranked-timing',
+    graph:    'graph-timing',
+  };
+  for (const [key, elId] of Object.entries(mapping)) {
+    const el = $(elId);
+    if (!el) continue;
+    const secs = timings[key];
+    if (secs !== undefined && secs !== null) {
+      el.textContent = secs >= 1 ? `${secs.toFixed(1)}s` : `${Math.round(secs * 1000)}ms`;
+      el.style.display = '';
+    } else {
+      el.style.display = 'none';
+      el.textContent = '';
+    }
+  }
 }
 
 // ─── Render cost info badge in reranked column ──────────

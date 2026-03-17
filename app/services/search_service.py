@@ -80,7 +80,7 @@ class SearchService:
             p for p in self._problems
             if p.get("full_text_vector") is not None
             and (exclude_id is None or p.get("id") != exclude_id)
-            and (grade is None or p.get("grade") == grade)
+            and (grade is None or str(p.get("grade")) == str(grade))
             and (school_level is None or p.get("school_level") == school_level)
         ]
 
@@ -130,7 +130,7 @@ class SearchService:
             if p.get("question_vector") is not None
             and p.get("solution_vector") is not None
             and (exclude_id is None or p.get("id") != exclude_id)
-            and (grade is None or p.get("grade") == grade)
+            and (grade is None or str(p.get("grade")) == str(grade))
             and (school_level is None or p.get("school_level") == school_level)
         ]
 
