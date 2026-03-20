@@ -14,8 +14,8 @@ jobs:
     steps:
       - name: Request Copilot review via REST API
         env:
-          GH_TOKEN: ${{ github.token }}
-run: |
+          GH_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+        run: |
           gh api \
             --method POST \
             -H "Accept: application/vnd.github+json" \
