@@ -228,6 +228,9 @@ function buildSearchRequest() {
     graph_enabled:   $('graph-enabled').checked,
     graph_alpha:     parseFloat($('graph-alpha').value),
     graph_beta:      parseFloat($('graph-beta').value),
+    graph_gamma:     parseFloat($('graph-gamma').value),
+    graph_q_weight:  parseFloat($('graph-q-weight').value),
+    graph_s_weight:  parseFloat($('graph-s-weight').value),
   };
 }
 
@@ -532,10 +535,11 @@ function renderResultCard(result, searchType, rank) {
   const rerankReasonHtml = isReranked && result.rerank_reason ? `
     <div class="rerank-reason">${escapeHtml(result.rerank_reason)}</div>` : '';
 
-  // Graph score display
+  // Graph score display (Tag + Metadata)
   const graphScoreHtml = isGraph ? `
     <span class="graph-score-display">
-      G: ${(result.graph_score ?? 0).toFixed(2)}${result.graph_score_inferred ? '<span class="inferred-badge">추정</span>' : ''}
+      T: ${(result.graph_score ?? 0).toFixed(2)}${result.graph_score_inferred ? '<span class="inferred-badge">추정</span>' : ''}
+      M: ${(result.metadata_score ?? 0).toFixed(2)}
     </span>` : '';
 
   // Shared tags display
@@ -552,7 +556,7 @@ function renderResultCard(result, searchType, rank) {
       <div class="card-rank-score">
         <span class="rank-badge">${rank}</span>
         ${rerankScoreHtml || graphScoreHtml || vectorScoreHtml}
-        ${!isReranked && !isGraph && result.question_score !== undefined ? `
+        ${!isReranked && result.question_score !== undefined ? `
         <div class="score-breakdown">
           <span class="q-score">Q: ${result.question_score}</span>
           <span class="s-score">S: ${result.solution_score}</span>
@@ -871,20 +875,58 @@ $('rerank-enabled').addEventListener('change', () => {
 // ─── Graph checkbox toggle ───────────────────────────────
 $('graph-enabled').addEventListener('change', () => {
   const enabled = $('graph-enabled').checked;
-  $('graph-alpha-item').style.display = enabled ? '' : 'none';
-  $('graph-beta-item').style.display  = enabled ? '' : 'none';
+  $('graph-alpha-item').style.display    = enabled ? '' : 'none';
+  $('graph-beta-item').style.display     = enabled ? '' : 'none';
+  $('graph-gamma-item').style.display    = enabled ? '' : 'none';
+  $('graph-q-weight-item').style.display = enabled ? '' : 'none';
+  $('graph-s-weight-item').style.display = enabled ? '' : 'none';
   if (!enabled) {
     setGraphColumnVisible(false);
   }
 });
 
 // Graph alpha/beta slider sync
-$('graph-alpha').addEventListener('input', () => {
+// 3-axis slider sync: α + β + γ = 1.0
+// When α changes, β adjusts (γ stays); when γ changes, β adjusts (α stays)
+function syncGraphWeights(changedSlider) {
   const alpha = parseFloat($('graph-alpha').value);
-  const beta = Math.round((1 - alpha) * 100) / 100;
+  const gamma = parseFloat($('graph-gamma').value);
+  let beta;
+
+  if (changedSlider === 'alpha') {
+    beta = Math.round((1 - alpha - gamma) * 100) / 100;
+    if (beta < 0) {
+      // α too large, clamp γ
+      const newGamma = Math.round((1 - alpha) * 100) / 100;
+      $('graph-gamma').value = Math.max(0, newGamma);
+      $('graph-gamma-val').textContent = Math.max(0, newGamma).toFixed(2);
+      beta = Math.round((1 - alpha - Math.max(0, newGamma)) * 100) / 100;
+    }
+  } else {
+    beta = Math.round((1 - alpha - gamma) * 100) / 100;
+    if (beta < 0) {
+      const newAlpha = Math.round((1 - gamma) * 100) / 100;
+      $('graph-alpha').value = Math.max(0, newAlpha);
+      $('graph-alpha-val').textContent = Math.max(0, newAlpha).toFixed(2);
+      beta = Math.round((1 - Math.max(0, newAlpha) - gamma) * 100) / 100;
+    }
+  }
+  beta = Math.max(0, beta);
   $('graph-beta').value = beta;
-  $('graph-alpha-val').textContent = alpha.toFixed(2);
+  $('graph-alpha-val').textContent = parseFloat($('graph-alpha').value).toFixed(2);
   $('graph-beta-val').textContent = beta.toFixed(2);
+  $('graph-gamma-val').textContent = parseFloat($('graph-gamma').value).toFixed(2);
+}
+$('graph-alpha').addEventListener('input', () => syncGraphWeights('alpha'));
+$('graph-gamma').addEventListener('input', () => syncGraphWeights('gamma'));
+
+// Graph Q/S weight slider sync
+$('graph-q-weight').addEventListener('input', () => {
+  const qw = parseFloat($('graph-q-weight').value);
+  const sw = Math.round((1 - qw) * 100) / 100;
+  $('graph-s-weight').value = sw;
+  $('graph-q-weight-val').textContent = qw.toFixed(2);
+  $('graph-s-weight-val').textContent = sw.toFixed(2);
 });
 
 // ─── Column toggle buttons ──────────────────────────────

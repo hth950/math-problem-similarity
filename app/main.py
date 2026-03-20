@@ -58,8 +58,11 @@ class SearchRequest(BaseModel):
     rerank_provider: str = "dev"  # "dev" or "openrouter"
     problem_id: int | None = None
     graph_enabled: bool = False
-    graph_alpha: float = 0.6
+    graph_alpha: float = 0.5
     graph_beta: float = 0.4
+    graph_gamma: float = 0.1
+    graph_q_weight: float = 0.3
+    graph_s_weight: float = 0.7
 
 
 class EvaluationRequest(BaseModel):
@@ -167,6 +170,9 @@ async def search_graph(req: SearchRequest):
         top_k=req.top_k,
         alpha=req.graph_alpha,
         beta=req.graph_beta,
+        gamma=req.graph_gamma,
+        q_weight=req.graph_q_weight,
+        s_weight=req.graph_s_weight,
         grade=req.grade,
         school_level=req.school_level,
         exclude_id=req.exclude_id,
@@ -213,6 +219,9 @@ async def search_compare(req: SearchRequest):
             top_k=req.top_k,
             alpha=req.graph_alpha,
             beta=req.graph_beta,
+            gamma=req.graph_gamma,
+            q_weight=req.graph_q_weight,
+            s_weight=req.graph_s_weight,
             grade=req.grade,
             school_level=req.school_level,
             exclude_id=req.exclude_id,
