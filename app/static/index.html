@@ -148,13 +148,28 @@
           </div>
           <div class="param-item" id="graph-alpha-item" style="display: none;">
             <label>Vector 가중치 (α)</label>
-            <input type="range" id="graph-alpha" min="0" max="1" step="0.05" value="0.6" />
-            <span id="graph-alpha-val" style="font-size:11px; color:var(--text-muted);">0.60</span>
+            <input type="range" id="graph-alpha" min="0" max="1" step="0.05" value="0.5" />
+            <span id="graph-alpha-val" style="font-size:11px; color:var(--text-muted);">0.50</span>
           </div>
           <div class="param-item" id="graph-beta-item" style="display: none;">
-            <label>Graph 가중치 (β)</label>
-            <input type="range" id="graph-beta" min="0" max="1" step="0.05" value="0.4" />
+            <label>Tag 가중치 (β)</label>
+            <input type="range" id="graph-beta" min="0" max="1" step="0.05" value="0.4" disabled />
             <span id="graph-beta-val" style="font-size:11px; color:var(--text-muted);">0.40</span>
+          </div>
+          <div class="param-item" id="graph-gamma-item" style="display: none;">
+            <label>Meta 가중치 (γ)</label>
+            <input type="range" id="graph-gamma" min="0" max="1" step="0.05" value="0.1" />
+            <span id="graph-gamma-val" style="font-size:11px; color:var(--text-muted);">0.10</span>
+          </div>
+          <div class="param-item" id="graph-q-weight-item" style="display: none;">
+            <label>Graph Q 가중치</label>
+            <input type="range" id="graph-q-weight" min="0" max="1" step="0.05" value="0.3" />
+            <span id="graph-q-weight-val" style="font-size:11px; color:var(--text-muted);">0.30</span>
+          </div>
+          <div class="param-item" id="graph-s-weight-item" style="display: none;">
+            <label>Graph S 가중치</label>
+            <input type="range" id="graph-s-weight" min="0" max="1" step="0.05" value="0.7" disabled />
+            <span id="graph-s-weight-val" style="font-size:11px; color:var(--text-muted);">0.70</span>
           </div>
         </div>
 
@@ -316,7 +331,7 @@
             <span class="col-dot col-dot-graph"></span>
             <div>
               <div>Graph DB</div>
-              <div class="col-subtitle">Neo4j 벡터 + 태그 구조</div>
+              <div class="col-subtitle">Neo4j Q/S 분리벡터 + 태그 구조</div>
             </div>
           </div>
           <div style="display:flex; align-items:center; gap:8px;">

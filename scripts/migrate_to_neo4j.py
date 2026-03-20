@@ -193,7 +193,7 @@ def step4_create_problem_nodes(session, sqlite_db, batch_size, skip_vectors):
         SELECT id, question, answer, grade, school_level, type, level,
                group_id, main_category_tag_id, solution, refer,
                choice1, choice2, choice3, choice4, choice5,
-               full_text_vector
+               full_text_vector, question_vector, solution_vector
         FROM problems
         """
     )
@@ -210,12 +210,22 @@ def step4_create_problem_nodes(session, sqlite_db, batch_size, skip_vectors):
             p["level"] = safe_int(p["level"])
             p["main_category_tag_id"] = safe_int(p["main_category_tag_id"])
 
-            # Convert embedding BLOB to list[float]
+            # Convert embedding BLOBs to list[float]
             vec_blob = p.pop("full_text_vector")
+            q_vec_blob = p.pop("question_vector")
+            s_vec_blob = p.pop("solution_vector")
             if vec_blob and not skip_vectors:
                 p["embedding"] = np.frombuffer(vec_blob, dtype=np.float32).tolist()
             else:
                 p["embedding"] = None
+            if q_vec_blob and not skip_vectors:
+                p["question_embedding"] = np.frombuffer(q_vec_blob, dtype=np.float32).tolist()
+            else:
+                p["question_embedding"] = None
+            if s_vec_blob and not skip_vectors:
+                p["solution_embedding"] = np.frombuffer(s_vec_blob, dtype=np.float32).tolist()
+            else:
+                p["solution_embedding"] = None
 
             # Remove large text fields not needed in Neo4j
             for key in [
@@ -243,7 +253,9 @@ def step4_create_problem_nodes(session, sqlite_db, batch_size, skip_vectors):
                 prob.level = p.level,
                 prob.group_id = p.group_id,
                 prob.main_category_tag_id = p.main_category_tag_id,
-                prob.embedding = p.embedding
+                prob.embedding = p.embedding,
+                prob.question_embedding = p.question_embedding,
+                prob.solution_embedding = p.solution_embedding
             """,
             problems=problems,
         )
@@ -475,6 +487,28 @@ def step8_create_indexes(session, skip_vectors):
             }}
             """
         )
+        print("  Creating vector index (question_embedding)...")
+        session.run(
+            """
+            CREATE VECTOR INDEX question_embedding IF NOT EXISTS
+            FOR (p:Problem) ON (p.question_embedding)
+            OPTIONS {indexConfig: {
+                `vector.dimensions`: 3072,
+                `vector.similarity_function`: 'cosine'
+            }}
+            """
+        )
+        print("  Creating vector index (solution_embedding)...")
+        session.run(
+            """
+            CREATE VECTOR INDEX solution_embedding IF NOT EXISTS
+            FOR (p:Problem) ON (p.solution_embedding)
+            OPTIONS {indexConfig: {
+                `vector.dimensions`: 3072,
+                `vector.similarity_function`: 'cosine'
+            }}
+            """
+        )
 
     # Property indexes
     index_statements = [
@@ -547,6 +581,11 @@ def parse_args():
         action="store_true",
         help="Clear all Neo4j data before migration",
     )
+    parser.add_argument(
+        "--vectors-only",
+        action="store_true",
+        help="Only update vectors on existing Problem nodes + rebuild vector indexes (skip tags/relationships)",
+    )
     return parser.parse_args()
 
 
@@ -568,11 +607,12 @@ def main():
 
     print("=== Neo4j Migration ===")
     print(f"SQLite: {sqlite_db}")
-    print(f"MySQL:  {DB_HOST}:{DB_PORT}/{DB_NAME}")
     print(f"Neo4j:  {NEO4J_URI}")
     print(f"Batch size: {args.batch_size}")
     if args.skip_vectors:
         print("Vectors: SKIPPED")
+    if args.vectors_only:
+        print("Mode: VECTORS-ONLY (Step 4 + Step 8 only)")
     print()
 
     # --- Connect ---
@@ -580,58 +620,67 @@ def main():
     driver.verify_connectivity()
     print("Neo4j connected.")
 
-    mysql_conn = mysql.connector.connect(
-        host=DB_HOST,
-        port=DB_PORT,
-        user=DB_USER,
-        password=DB_PASSWORD,
-        database=DB_NAME,
-    )
-    mysql_cursor = mysql_conn.cursor()
-    print("MySQL connected.")
-
     if not os.path.exists(sqlite_db):
         print(f"ERROR: SQLite database not found: {sqlite_db}")
         sys.exit(1)
     print("SQLite verified.")
 
-    # --- Migrate ---
-    with driver.session() as session:
-        if args.clear:
-            print("\nClearing all Neo4j data...")
-            session.run("MATCH (n) DETACH DELETE n")
-            print("Cleared.")
+    if args.vectors_only:
+        # Fast path: only update vectors and indexes (no MySQL needed)
+        with driver.session() as session:
+            step4_create_problem_nodes(session, sqlite_db, args.batch_size, args.skip_vectors)
+            step8_create_indexes(session, args.skip_vectors)
+            step9_verify(session)
+        driver.close()
+    else:
+        print(f"MySQL:  {DB_HOST}:{DB_PORT}/{DB_NAME}")
+        mysql_conn = mysql.connector.connect(
+            host=DB_HOST,
+            port=DB_PORT,
+            user=DB_USER,
+            password=DB_PASSWORD,
+            database=DB_NAME,
+        )
+        mysql_cursor = mysql_conn.cursor()
+        print("MySQL connected.")
 
-        # Step 1: Load active tags
-        active_tags, active_tag_ids = step1_load_tags(mysql_cursor)
+        # --- Migrate ---
+        with driver.session() as session:
+            if args.clear:
+                print("\nClearing all Neo4j data...")
+                session.run("MATCH (n) DETACH DELETE n")
+                print("Cleared.")
 
-        # Step 2: Create Tag nodes
-        step2_create_tag_nodes(session, active_tags, args.batch_size)
+            # Step 1: Load active tags
+            active_tags, active_tag_ids = step1_load_tags(mysql_cursor)
 
-        # Step 3: CHILD_OF relationships
-        step3_create_tag_hierarchy(session)
+            # Step 2: Create Tag nodes
+            step2_create_tag_nodes(session, active_tags, args.batch_size)
 
-        # Step 4: Problem nodes from SQLite
-        step4_create_problem_nodes(session, sqlite_db, args.batch_size, args.skip_vectors)
+            # Step 3: CHILD_OF relationships
+            step3_create_tag_hierarchy(session)
 
-        # Step 5: HAS_TAG from MySQL problem_tag_bind
-        step5_create_has_tag(session, mysql_cursor, sqlite_db, active_tag_ids, args.batch_size)
+            # Step 4: Problem nodes from SQLite
+            step4_create_problem_nodes(session, sqlite_db, args.batch_size, args.skip_vectors)
 
-        # Step 6: MAIN_TAG relationships
-        step6_create_main_tag(session)
+            # Step 5: HAS_TAG from MySQL problem_tag_bind
+            step5_create_has_tag(session, mysql_cursor, sqlite_db, active_tag_ids, args.batch_size)
 
-        # Step 7: ProblemGroup, Source, School
-        step7_create_groups_sources_schools(session, mysql_cursor, sqlite_db, args.batch_size)
+            # Step 6: MAIN_TAG relationships
+            step6_create_main_tag(session)
 
-        # Step 8: Indexes
-        step8_create_indexes(session, args.skip_vectors)
+            # Step 7: ProblemGroup, Source, School
+            step7_create_groups_sources_schools(session, mysql_cursor, sqlite_db, args.batch_size)
 
-        # Step 9: Verification
-        step9_verify(session)
+            # Step 8: Indexes
+            step8_create_indexes(session, args.skip_vectors)
 
-    # --- Cleanup ---
-    driver.close()
-    mysql_conn.close()
+            # Step 9: Verification
+            step9_verify(session)
+
+        # --- Cleanup ---
+        driver.close()
+        mysql_conn.close()
 
     elapsed = time.time() - overall_t0
     print(f"\nMigration complete! Total time: {elapsed:.1f}s")
